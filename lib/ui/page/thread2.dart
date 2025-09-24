@@ -708,8 +708,8 @@ class _ThreadPage2State extends State<ThreadPage2> {
           children: [
             if (reply.userHash != 'Tips') buildQuoteOption(),
             buildCopyContentOption(),
-            buildBlockIdOption(),
-            buildBlockUserHashOption(),
+            if (reply.userHash != 'Tips') buildBlockIdOption(),
+            if (reply.userHash != 'Tips') buildBlockUserHashOption(),
           ],
         );
       },
@@ -773,6 +773,16 @@ class _ThreadPage2State extends State<ThreadPage2> {
       _pageManager.tryLoadNextPage().then((_) => setState(() {}));
       Future.delayed(Duration(milliseconds: 100), () {
         if (!mounted) return;
+
+        // 缓存header reply为引用
+        _refCache.put(
+          widget.headerThread.id,
+          Future.value(
+            RefHtml.fromReplyJson(
+              widget.headerThread,
+            ).copyWith(threadId: widget.headerThread.id),
+          ),
+        );
 
         _saveHistory();
         if (widget.startReplyId == null) {
@@ -1286,7 +1296,7 @@ class _ThreadPage2State extends State<ThreadPage2> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutExpo,
         height: _showBar || appState.setting.fixedBottomBar
-            ? kToolbarHeight + MediaQuery.of(context).padding.bottom
+            ? kToolbarHeight + 10 + MediaQuery.of(context).padding.bottom
             : 0,
         child: BottomAppBar(
           shape: CircularNotchedRectangle(),

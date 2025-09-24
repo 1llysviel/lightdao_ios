@@ -870,38 +870,41 @@ class _ThreadPageState extends State<ThreadPage> {
                 );
               },
             ),
-            SimpleDialogOption(
-              child: Text('屏蔽No.${reply.id}'),
-              onPressed: () {
-                if (!appState.setting.threadFilters.any(
-                  (filter) => filter is IdThreadFilter && filter.id == reply.id,
-                )) {
-                  appState.setState((_) {
-                    appState.setting.threadFilters.add(
-                      IdThreadFilter(id: reply.id),
-                    );
-                  });
-                }
-                Navigator.of(context).pop();
-              },
-            ),
-            SimpleDialogOption(
-              child: Text('屏蔽饼干${reply.userHash}'),
-              onPressed: () {
-                if (!appState.setting.threadFilters.any(
-                  (filter) =>
-                      filter is UserHashFilter &&
-                      filter.userHash == reply.userHash,
-                )) {
-                  appState.setState((_) {
-                    appState.setting.threadFilters.add(
-                      UserHashFilter(userHash: reply.userHash),
-                    );
-                  });
-                }
-                Navigator.of(context).pop();
-              },
-            ),
+            if (reply.userHash != 'Tips')
+              SimpleDialogOption(
+                child: Text('屏蔽No.${reply.id}'),
+                onPressed: () {
+                  if (!appState.setting.threadFilters.any(
+                    (filter) =>
+                        filter is IdThreadFilter && filter.id == reply.id,
+                  )) {
+                    appState.setState((_) {
+                      appState.setting.threadFilters.add(
+                        IdThreadFilter(id: reply.id),
+                      );
+                    });
+                  }
+                  Navigator.of(context).pop();
+                },
+              ),
+            if (reply.userHash != 'Tips')
+              SimpleDialogOption(
+                child: Text('屏蔽饼干${reply.userHash}'),
+                onPressed: () {
+                  if (!appState.setting.threadFilters.any(
+                    (filter) =>
+                        filter is UserHashFilter &&
+                        filter.userHash == reply.userHash,
+                  )) {
+                    appState.setState((_) {
+                      appState.setting.threadFilters.add(
+                        UserHashFilter(userHash: reply.userHash),
+                      );
+                    });
+                  }
+                  Navigator.of(context).pop();
+                },
+              ),
           ],
         );
       },
@@ -1041,7 +1044,9 @@ class _ThreadPageState extends State<ThreadPage> {
           _hasMoreBefore = false;
         }
         for (var rply in newThreadData.replies) {
-          refCache.put(rply.id, Future.value(RefHtml.fromReplyJson(rply)));
+          if (rply.userHash != 'Tips') {
+            refCache.put(rply.id, Future.value(RefHtml.fromReplyJson(rply)));
+          }
         }
         _replies.removeWhere((item) => item.page == _currentMinPage);
         _replies.insertAll(
@@ -1106,7 +1111,9 @@ class _ThreadPageState extends State<ThreadPage> {
           return;
         }
         for (var rply in newThreadData.replies) {
-          refCache.put(rply.id, Future.value(RefHtml.fromReplyJson(rply)));
+          if (rply.userHash != 'Tips') {
+            refCache.put(rply.id, Future.value(RefHtml.fromReplyJson(rply)));
+          }
         }
         if (widget.startReplyId > 0) {
           final historyIndex = newThreadData.replies.indexWhere(
@@ -1210,7 +1217,9 @@ class _ThreadPageState extends State<ThreadPage> {
         );
         _replies.removeWhere((item) => item.page == _currentMaxPage);
         for (var rply in newThreadData.replies) {
-          refCache.put(rply.id, Future.value(RefHtml.fromReplyJson(rply)));
+          if (rply.userHash != 'Tips') {
+            refCache.put(rply.id, Future.value(RefHtml.fromReplyJson(rply)));
+          }
         }
         _replies.addAll(
           newThreadData.replies.mapIndex(
