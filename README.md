@@ -117,6 +117,41 @@ flutter pub run build_runner build --delete-conflicting-outputs
   flutter build <platform> --release
   ```
 
+## 📦 iOS 未签名 IPA（GitHub Actions）
+
+仓库中的 `.github/workflows/ios_unsigned.yaml` 会在 macOS runner 上执行 `flutter build ios --release --no-codesign`，并将 `Runner.app` 打包为未签名的 `lightdao-<tag>-unsigned.ipa`。
+
+**触发方式**
+
+- **推送 tag**：推送 `v*` 格式的 tag（如 `v1.4.7`）时自动构建，并把 IPA 上传到该 tag 对应的 Release。Release 正文取自 tag 说明（annotated tag）或 tag 所指提交的提交信息。
+  ```bash
+  git tag -a v1.4.7 -m "更新说明"
+  git push origin v1.4.7
+  ```
+- **手动触发**：在仓库 Actions 页面选择 **iOS Unsigned IPA → Run workflow**，或使用 `gh` 命令：
+  ```bash
+  # 构建并发布到 Releases（tag 留空时使用 v<pubspec 版本号>，tag 不存在会自动创建）
+  gh workflow run ios_unsigned.yaml -f release=true
+
+  # 指定 Release tag
+  gh workflow run ios_unsigned.yaml -f release=true -f tag=v1.4.7-ios
+
+  # 只构建，IPA 作为 Actions artifact（名为 ipa）上传，不发布 Release
+  gh workflow run ios_unsigned.yaml -f release=false
+  ```
+
+**安装**
+
+IPA 未签名，不能直接安装，需要通过 AltStore / SideStore / TrollStore 等工具自行签名后安装。
+
+**本地打包**
+
+```bash
+flutter build ios --release --no-codesign
+mkdir -p Payload && cp -R build/ios/iphoneos/Runner.app Payload/
+zip -qry lightdao-unsigned.ipa Payload
+```
+
 ## 📂 目录结构
 
 ```
