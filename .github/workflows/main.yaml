@@ -114,35 +114,52 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Required to fetch all history for tags
+          fetch-tags: true
 
-      - name: Get release body from tag
-        run: git tag -l --format='%(contents)' ${{ github.ref_name }} > RELEASE_BODY.md
+      - name: Build release body from tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_NAME="${{ github.ref_name }}"
+          TAG_REF="refs/tags/${TAG_NAME}"
+          # actions/checkout may fetch the peeled commit object for annotated tags.
+          # Force-fetch the tag ref to ensure the tag object exists locally.
+          git fetch --force origin "${TAG_REF}:${TAG_REF}"
+
+          TAG_TYPE="$(git cat-file -t "$TAG_REF" | tr -d '\r\n')"
+          if [ "$TAG_TYPE" = "tag" ]; then
+            # Annotated tag: strip headers, keep raw message (markdown headings preserved)
+            BODY="$(git cat-file -p "$TAG_REF" | sed '1,/^$/d' | sed 's/\r$//')"
+          else
+            # Lightweight tag: fall back to commit message
+            BODY="$(git show -s --format=%B "$TAG_NAME")"
+          fi
+          if [ -z "$BODY" ]; then
+            echo "Release ${TAG_NAME}" > RELEASE_BODY.md
+          else
+            printf '%s\n' "$BODY" > RELEASE_BODY.md
+          fi
 
       - name: Download APK from build
         uses: actions/download-artifact@v4
         with:
           name: apk
+          path: artifacts
 
       - name: Display structure of downloaded files
         run: ls -R
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Create Release and Upload APK
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           body_path: RELEASE_BODY.md
-
-      - name: Upload Release APK
-        id: upload_release_asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/app-release.apk
-          asset_name: app-release.apk
-          asset_content_type: application/zip
+          files: |
+            artifacts/**/*.apk
+          draft: false
+          prerelease: false
+          allowUpdates: true
+          make_latest: true

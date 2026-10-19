@@ -8,6 +8,7 @@ import 'package:lightdao/data/phrase.dart';
 import 'package:lightdao/ui/page/more/icon_select.dart';
 import 'package:lightdao/ui/page/debug/tsukuyomi_test.dart';
 import 'package:lightdao/ui/page/debug/reply_dialog.dart';
+import 'package:lightdao/utils/xdao_cdn.dart';
 import 'package:provider/provider.dart';
 import 'package:swipeable_page_route/swipeable_page_route.dart';
 import 'package:file_picker/file_picker.dart';
@@ -32,6 +33,125 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = Provider.of<MyAppState>(context);
     final breakpoint = Breakpoint.fromMediaQuery(context);
+    final baseCdnPresets = [xdaoCdnAuto, ...xdaoBaseCdns];
+    final refCdnPresets = [xdaoCdnAuto, ...xdaoRefCdns];
+    String cdnLabel(String value) => value == xdaoCdnAuto ? '自动' : value;
+
+    Future<void> pickCdn({required bool isBase}) async {
+      final presets = isBase ? baseCdnPresets : refCdnPresets;
+      final current = isBase
+          ? appState.setting.baseCdn
+          : appState.setting.refCdn;
+      String? selected = current;
+      String? customValue;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          final controller = TextEditingController(
+            text: current != 'auto' && !presets.contains(current)
+                ? current
+                : '',
+          );
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog(
+                title: Text(isBase ? '设置默认请求CDN' : '设置引用请求CDN'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ...List.generate(presets.length, (index) {
+                        final value = presets[index];
+                        return RadioListTile<String>(
+                          value: value,
+                          groupValue: selected,
+                          title: Text(cdnLabel(value)),
+                          onChanged: (v) {
+                            setState(() {
+                              selected = v;
+                              customValue = null;
+                              controller.text = '';
+                            });
+                          },
+                        );
+                      }),
+                      RadioListTile<String>(
+                        value: 'custom',
+                        groupValue: selected,
+                        title: Text('自定义'),
+                        onChanged: (v) {
+                          setState(() {
+                            selected = v;
+                          });
+                        },
+                      ),
+                      if (selected == 'custom')
+                        TextField(
+                          controller: controller,
+                          decoration: InputDecoration(
+                            hintText: '以 https:// 开头的完整域名',
+                            errorText: () {
+                              final text = controller.text.trim();
+                              if (text.isEmpty) return null;
+                              if (!text.toLowerCase().startsWith('https://')) {
+                                return '必须以 https:// 开头';
+                              }
+                              return null;
+                            }(),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      if (isBase)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            '此设置影响看串、发串等请求，错误配置可能导致无法读取数据。',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('取消'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      final useCustom = selected == 'custom';
+                      if (useCustom) {
+                        final trimmed = controller.text.trim();
+                        if (!trimmed.toLowerCase().startsWith('https://')) {
+                          return;
+                        }
+                        customValue = trimmed;
+                      }
+                      final result = useCustom
+                          ? customValue ?? current
+                          : selected ?? current;
+                      if (isBase) {
+                        appState.setState((state) {
+                          state.setting.baseCdn = result;
+                        });
+                      } else {
+                        appState.setState((state) {
+                          state.setting.refCdn = result;
+                        });
+                      }
+                      Navigator.pop(context);
+                    },
+                    child: Text('确定'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    }
+
     pageRoute({required Widget Function(BuildContext) builder}) {
       final setting = Provider.of<MyAppState>(context, listen: false).setting;
       if (setting.enableSwipeBack) {
@@ -344,6 +464,20 @@ class SettingsPage extends StatelessWidget {
               ),
               SettingsTile.sliderTile(
                 contentPadding: breakpoint.gutters,
+                title:
+                    '论坛页字体大小缩放（${appState.setting.forumFontSizeFactor.toStringAsFixed(1)}）',
+                min: 0.7,
+                max: 1.3,
+                value: appState.setting.forumFontSizeFactor,
+                divisions: 6,
+                onChanged: (double value) {
+                  appState.setState((state) {
+                    state.setting.forumFontSizeFactor = value;
+                  });
+                },
+              ),
+              SettingsTile.sliderTile(
+                contentPadding: breakpoint.gutters,
                 title: '表情栏列宽度（${appState.setting.phraseWidth}）',
                 subtitle: '值越小表情栏列数越多',
                 min: 75,
@@ -358,10 +492,51 @@ class SettingsPage extends StatelessWidget {
               ),
             ],
           ),
+          // 网络
+          SettingsSection(
+            title: Text('网络'),
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: breakpoint.gutters,
+                ),
+                title: Text('默认请求CDN'),
+                subtitle: Text('影响看串/发串等请求，建议保持自动'),
+                trailing: Text(
+                  cdnLabel(appState.setting.baseCdn),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                onTap: () => pickCdn(isBase: true),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: breakpoint.gutters,
+                ),
+                title: Text('引用请求CDN'),
+                subtitle: Text('影响引用加载'),
+                trailing: Text(
+                  cdnLabel(appState.setting.refCdn),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                onTap: () => pickCdn(isBase: false),
+              ),
+            ],
+          ),
           // 功能
           SettingsSection(
             title: Text('功能'),
             children: [
+              SettingsTile.switchTile(
+                contentPadding: breakpoint.gutters,
+                title: '启动时检查更新',
+                subtitle: '关闭后启动时不再自动检查新版本',
+                switchValue: appState.setting.checkUpdateOnLaunch,
+                onToggle: (bool value) {
+                  appState.setState((state) {
+                    state.setting.checkUpdateOnLaunch = value;
+                  });
+                },
+              ),
               SettingsTile.inputTile(
                 contentPadding: breakpoint.gutters,
                 title: '拉取超时',

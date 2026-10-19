@@ -202,6 +202,18 @@ class LightDaoSetting extends HiveObject {
   @HiveField(43, defaultValue: [])
   List<FavoredItem> favoredItems;
 
+  @HiveField(44, defaultValue: 1.0)
+  double forumFontSizeFactor;
+
+  @HiveField(45, defaultValue: true)
+  bool checkUpdateOnLaunch;
+
+  @HiveField(46, defaultValue: 'auto')
+  String baseCdn;
+
+  @HiveField(47, defaultValue: 'auto')
+  String refCdn;
+
   LightDaoSetting({
     required this.cookies,
     required this.currentCookie,
@@ -246,6 +258,10 @@ class LightDaoSetting extends HiveObject {
     required this.phraseWidth,
     required this.fetchTimeout,
     required this.favoredItems,
+    required this.forumFontSizeFactor,
+    required this.checkUpdateOnLaunch,
+    required this.baseCdn,
+    required this.refCdn,
     LRUCache<int, ReplyJsonWithPage>? viewPoOnlyHistory,
   }) : viewHistory = viewHistory ?? LRUCache<int, ReplyJsonWithPage>(5000),
        viewPoOnlyHistory =
@@ -265,6 +281,8 @@ class LightDaoSetting extends HiveObject {
     required this.threadFilters,
     required this.phrases,
     required this.favoredItems,
+    required this.baseCdn,
+    required this.refCdn,
     LRUCache<int, ReplyJsonWithPage>? viewHistory,
     LRUCache<int, ReplyJsonWithPage>? viewPoOnlyHistory,
   }) : refCollapsing = 2,
@@ -296,6 +314,8 @@ class LightDaoSetting extends HiveObject {
        isMultiColumn = true,
        phraseWidth = 175,
        fetchTimeout = 3,
+       forumFontSizeFactor = 1.0,
+       checkUpdateOnLaunch = true,
        seenNoticeDate = 0,
        viewHistory = viewHistory ?? LRUCache<int, ReplyJsonWithPage>(5000),
        viewPoOnlyHistory =
@@ -365,7 +385,12 @@ class MyAppState with ChangeNotifier {
     void Function(MyAppState state) fun, {
     bool markRebuild = true,
   }) async {
+    final prevBaseCdn = setting.baseCdn;
+    final prevRefCdn = setting.refCdn;
     fun(this);
+    if (setting.baseCdn != prevBaseCdn || setting.refCdn != prevRefCdn) {
+      applyNetworkSettings();
+    }
     if (markRebuild) {
       notifyListeners();
     }
@@ -545,8 +570,11 @@ class MyAppState with ChangeNotifier {
           threadFilters: [],
           phrases: [],
           favoredItems: [],
+          baseCdn: 'auto',
+          refCdn: 'auto',
           viewPoOnlyHistory: LRUCache<int, ReplyJsonWithPage>(5000),
         );
+    applyNetworkSettings();
     setting.phrases = mergePhraseLists(setting.phrases, xDaoPhrases);
     // ignore: deprecated_member_use_from_same_package
     if (setting.favoredItems.isEmpty && setting.favoredForums.isNotEmpty) {
@@ -559,6 +587,10 @@ class MyAppState with ChangeNotifier {
       await saveSettings();
     }
     notifyListeners();
+  }
+
+  void applyNetworkSettings() {
+    applyCdnSetting(baseCdn: setting.baseCdn, refCdn: setting.refCdn);
   }
 
   Future<void> saveSettings() async {
@@ -582,7 +614,10 @@ class MyAppState with ChangeNotifier {
       phrases: setting.phrases,
       viewHistory: setting.viewHistory,
       viewPoOnlyHistory: setting.viewPoOnlyHistory,
+      baseCdn: setting.baseCdn,
+      refCdn: setting.refCdn,
     );
+    applyNetworkSettings();
     notifyListeners();
     saveSettings();
   }
