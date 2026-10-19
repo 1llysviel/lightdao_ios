@@ -1,0 +1,111 @@
+name: iOS Unsigned IPA
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '发布到 Releases（否则只上传 Actions artifact）'
+        type: boolean
+        default: true
+      tag:
+        description: 'Release tag（留空则使用 v<pubspec 版本号>）'
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: Build unsigned IPA
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Resolve version and tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E '^version:' pubspec.yaml | sed -E 's/version:[[:space:]]*//; s/\+.*//')"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v${VERSION}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "ipa=lightdao-${TAG}-unsigned.ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS app (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf Payload
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry "${{ steps.meta.outputs.ipa }}" Payload
+          ls -lh "${{ steps.meta.outputs.ipa }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: ${{ steps.meta.outputs.ipa }}
+
+      - name: Build release body
+        if: github.event_name == 'push' || inputs.release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_NAME="${{ steps.meta.outputs.tag }}"
+          TAG_REF="refs/tags/${TAG_NAME}"
+          BODY=""
+          if git fetch --force origin "${TAG_REF}:${TAG_REF}" 2>/dev/null; then
+            if [ "$(git cat-file -t "$TAG_REF" | tr -d '\r\n')" = "tag" ]; then
+              BODY="$(git cat-file -p "$TAG_REF" | sed '1,/^$/d' | sed 's/\r$//')"
+            else
+              BODY="$(git show -s --format=%B "$TAG_NAME")"
+            fi
+          fi
+          {
+            if [ -n "$BODY" ]; then printf '%s\n\n' "$BODY"; fi
+            echo "iOS 包为未签名 IPA，需自行通过 AltStore / SideStore / TrollStore 等方式签名安装。"
+          } > RELEASE_BODY.md
+
+      - name: Publish to Releases
+        if: github.event_name == 'push' || inputs.release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          body_path: RELEASE_BODY.md
+          files: ${{ steps.meta.outputs.ipa }}
