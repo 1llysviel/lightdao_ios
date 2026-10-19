@@ -44,8 +44,6 @@ jobs:
   apk:
     name: Generate APK
     runs-on: ubuntu-latest
-    env:
-      JKS_KEYSTORE_BASE64: ${{ secrets.JKS_KEYSTORE_BASE64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,10 +71,12 @@ jobs:
             ${{ runner.os }}-flutter-build-apk-
   
       - name: Conditional Restore JKS
-        if: env.JKS_KEYSTORE_BASE64 != '' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/ci-test') || github.ref == 'refs/heads/master')
+        if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/ci-test') || github.ref == 'refs/heads/master'
         run: |
           echo "使用GitHub Secrets签名配置"
-          echo "$JKS_KEYSTORE_BASE64" | base64 -d > android/app/lightdao-app.jks
+          echo ${{ secrets.JKS_KEYSTORE_BASE64 }} | base64 -d > android/app/lightdao-app.jks
+        env:
+          JKS_KEYSTORE_BASE64: ${{ secrets.JKS_KEYSTORE_BASE64 }}
   
       - name: Build APK
         run: |
